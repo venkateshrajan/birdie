@@ -3,15 +3,14 @@ import { SiteHeader } from "@/components/site-header";
 import { DayLog, PeopleTable, Panel, StatStrip } from "@/components/summary";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { getLog, getStats, getSummary } from "@/lib/queries";
+import { getLedger } from "@/lib/ledger";
 
-// Always reflect the latest data — this is a tiny single-node app.
+// Reads straight from the Splitwise group (source of truth) on each request.
+// Caching is a deliberate later step.
 export const dynamic = "force-dynamic";
 
-export default function PublicDashboard() {
-  const stats = getStats();
-  const summary = getSummary();
-  const log = getLog();
+export default async function PublicDashboard() {
+  const { stats, summary, log } = await getLedger();
 
   return (
     <>

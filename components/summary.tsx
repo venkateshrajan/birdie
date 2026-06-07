@@ -90,7 +90,7 @@ export function DayLog({
       {log.map((d) => {
         const clickable = !!onDayClick;
         return (
-          <li key={d.date}>
+          <li key={d.splitwiseExpenseId ?? d.date}>
             <button
               type="button"
               disabled={!clickable}
