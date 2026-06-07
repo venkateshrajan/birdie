@@ -1,0 +1,36 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+# The self-hosted runner IS the VPS. This repo has its OWN runner instance
+# registered to it (the kaasu runner can't serve another repo on a personal
+# account). We cd into the production checkout (path stored as the
+# DEPLOY_REMOTE_PATH repo variable) and run the in-place deploy script there
+# — no SSH, no actions/checkout, no env injection. The script handles git
+# pull, build, SQLite backup, and pm2 (re)start.
+jobs:
+  deploy:
+    name: Build & deploy on VPS
+    runs-on: self-hosted
+    timeout-minutes: 30
+    steps:
+      - name: Run scripts/deploy.sh
+        env:
+          DEPLOY_REMOTE_PATH: ${{ vars.DEPLOY_REMOTE_PATH }}
+        run: |
+          : "${DEPLOY_REMOTE_PATH:?DEPLOY_REMOTE_PATH must be set as a repo Variable (e.g. /opt/birdie)}"
+          cd "$DEPLOY_REMOTE_PATH"
+          # Pre-pull so we run the latest version of scripts/deploy.sh itself.
+          # Without this, bash executes whatever was on disk when the runner
+          # triggered, even though the script does its own git pull later —
+          # too late to affect the script in memory. The script's own
+          # `git pull` then becomes a harmless no-op.
+          git pull --ff-only
+          ./scripts/deploy.sh

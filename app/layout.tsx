@@ -34,6 +34,9 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      // Browser extensions (e.g. Dark Reader) inject attributes on <html> before
+      // hydration; suppress the benign mismatch one level deep on this element only.
+      suppressHydrationWarning
       className={`${sora.variable} ${anton.variable} ${spaceMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col">
