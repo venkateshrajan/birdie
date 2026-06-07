@@ -15,7 +15,7 @@ import { getAdminData } from "@/lib/ledger";
 import { computeAdvance } from "@/lib/advance";
 import { extractPlayersFromScreenshot } from "@/lib/vision";
 import { anthropicApiKey } from "@/lib/env";
-import type { Rates } from "@/lib/dates";
+import { todayStr, type Rates } from "@/lib/dates";
 import type { ActionResult, AdvanceConfig, ScreenshotResult } from "@/lib/admin-types";
 
 /** Run a guarded mutation, then return fresh admin data (or the error). */
@@ -148,7 +148,7 @@ export async function readScreenshotAction(
   mediaType: string,
 ): Promise<ScreenshotResult> {
   await requireAdmin();
-  const empty = { matchedMemberIds: [], unmatchedNames: [] };
+  const empty = { matchedMemberIds: [], date: null };
   if (!anthropicApiKey()) {
     return { ok: false, error: "Screenshot reading is not configured.", ...empty };
   }
@@ -164,13 +164,14 @@ export async function readScreenshotAction(
       fullName: m.fullName,
       nickname: m.nickname,
     }));
-    const { matchedMemberIds, unmatchedNames } = await extractPlayersFromScreenshot(
+    const { matchedMemberIds, date } = await extractPlayersFromScreenshot(
       base64Data,
       mediaType as (typeof allowed)[number],
       roster,
       meId,
+      todayStr(),
     );
-    return { ok: true, matchedMemberIds, unmatchedNames };
+    return { ok: true, matchedMemberIds, date };
   } catch (e: unknown) {
     const error = e instanceof Error ? e.message : "Could not read the screenshot.";
     return { ok: false, error, ...empty };

@@ -48,10 +48,10 @@ export interface LoginState {
 export interface ScreenshotResult {
   ok: boolean;
   error?: string;
-  /** Matched roster member ids (host already excluded). */
+  /** Matched roster member ids (host excluded, non-roster names ignored). */
   matchedMemberIds: number[];
-  /** Player names read but not matched to a member. */
-  unmatchedNames: string[];
+  /** Session date (YYYY-MM-DD) read from the screenshot, or null. */
+  date: string | null;
 }
 
 // ---------- Monthly advance ----------
