@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { SiteHeader } from "@/components/site-header";
@@ -16,10 +16,33 @@ import {
   createSessionAction,
   deleteSessionAction,
   logoutAction,
+  readScreenshotAction,
   setNicknameAction,
   setRatesAction,
   updateSessionAction,
 } from "./actions";
+
+/** Downscale an image file to a small JPEG (keeps Server Action payloads well
+ *  under the 1MB limit and trims vision tokens). Returns base64 (no data URL
+ *  prefix). */
+async function downscaleToBase64(
+  file: File,
+  maxEdge = 1280,
+  quality = 0.85,
+): Promise<string> {
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
+  const w = Math.max(1, Math.round(bitmap.width * scale));
+  const h = Math.max(1, Math.round(bitmap.height * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas is not supported in this browser.");
+  ctx.drawImage(bitmap, 0, 0, w, h);
+  bitmap.close();
+  return canvas.toDataURL("image/jpeg", quality).split(",")[1] ?? "";
+}
 
 const MAX_SESSIONS_SHOWN = 60;
 
@@ -34,12 +57,16 @@ interface Form {
 export function AdminConsole({
   initialData,
   today,
+  screenshotEnabled,
 }: {
   initialData: AdminData;
   today: string;
+  screenshotEnabled: boolean;
 }) {
   const [data, setData] = useState<AdminData>(initialData);
   const [busy, setBusy] = useState(false);
+  const [reading, setReading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const freshForm = (date: string): Form => ({
     date,
@@ -97,6 +124,41 @@ export function AdminConsole({
         ? f.attendees.filter((x) => x !== id)
         : [...f.attendees, id],
     }));
+  }
+
+  async function onScreenshot(file: File | undefined | null) {
+    if (!file) return;
+    setReading(true);
+    try {
+      const base64 = await downscaleToBase64(file);
+      if (!base64) throw new Error("Could not read that image.");
+      const res = await readScreenshotAction(base64, "image/jpeg");
+      if (!res.ok) {
+        toast.error(res.error ?? "Couldn't read the screenshot.");
+        return;
+      }
+      // Merge into the current selection (host already excluded server-side),
+      // so multiple screenshots for the same day accumulate. Review, then Add.
+      setForm((f) => ({
+        ...f,
+        attendees: [...new Set([...f.attendees, ...res.matchedMemberIds])],
+      }));
+      const n = res.matchedMemberIds.length;
+      if (n === 0 && res.unmatchedNames.length === 0) {
+        toast.error("No players found in that screenshot.");
+      } else {
+        let msg = `Selected ${n} player${n === 1 ? "" : "s"} — review and add.`;
+        if (res.unmatchedNames.length) {
+          msg += ` Couldn't match: ${res.unmatchedNames.join(", ")}.`;
+        }
+        toast.success(msg);
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't read the screenshot.");
+    } finally {
+      setReading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
   }
 
   function describe(attendeeIds: number[]): string {
@@ -272,7 +334,27 @@ export function AdminConsole({
                 <Label className="text-xs font-bold uppercase tracking-wide">
                   Who played
                 </Label>
-                <div className="flex gap-2">
+                <div className="flex items-center gap-2">
+                  {screenshotEnabled && (
+                    <>
+                      <input
+                        ref={fileRef}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => onScreenshot(e.target.files?.[0])}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => fileRef.current?.click()}
+                        disabled={busy || reading}
+                        title="Read players from a Playo screenshot (you are excluded)"
+                        className="rounded-[4px] border-2 border-ink bg-lime px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-ink disabled:opacity-50"
+                      >
+                        {reading ? "📷 reading…" : "📷 screenshot"}
+                      </button>
+                    </>
+                  )}
                   <button
                     type="button"
                     onClick={() =>

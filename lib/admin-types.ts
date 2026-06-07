@@ -42,3 +42,13 @@ export interface ActionResult {
 export interface LoginState {
   error?: string;
 }
+
+/** Result of reading a Playo screenshot into a draft attendee selection. */
+export interface ScreenshotResult {
+  ok: boolean;
+  error?: string;
+  /** Matched roster member ids (host already excluded). */
+  matchedMemberIds: number[];
+  /** Player names read but not matched to a member. */
+  unmatchedNames: string[];
+}

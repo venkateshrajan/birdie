@@ -12,8 +12,10 @@ import {
 } from "@/lib/splitwise";
 import { setNickname } from "@/lib/nicknames";
 import { getAdminData } from "@/lib/ledger";
+import { extractPlayersFromScreenshot } from "@/lib/vision";
+import { anthropicApiKey } from "@/lib/env";
 import type { Rates } from "@/lib/dates";
-import type { ActionResult } from "@/lib/admin-types";
+import type { ActionResult, ScreenshotResult } from "@/lib/admin-types";
 
 /** Run a guarded mutation, then return fresh admin data (or the error). */
 async function mutate(fn: () => Promise<void> | void): Promise<ActionResult> {
@@ -105,4 +107,40 @@ export async function setRatesAction(rates: Rates): Promise<ActionResult> {
 export async function clearChatAction(): Promise<void> {
   await requireAdmin();
   clearChat();
+}
+
+// ---------- Read a Playo screenshot into a draft attendee selection ----------
+
+export async function readScreenshotAction(
+  base64Data: string,
+  mediaType: string,
+): Promise<ScreenshotResult> {
+  await requireAdmin();
+  const empty = { matchedMemberIds: [], unmatchedNames: [] };
+  if (!anthropicApiKey()) {
+    return { ok: false, error: "Screenshot reading is not configured.", ...empty };
+  }
+  const allowed = ["image/png", "image/jpeg", "image/webp", "image/gif"] as const;
+  if (!allowed.includes(mediaType as (typeof allowed)[number])) {
+    return { ok: false, error: "Unsupported image type.", ...empty };
+  }
+  try {
+    const { members, meId } = await getAdminData();
+    const roster = members.map((m) => ({
+      id: m.id,
+      name: m.name,
+      fullName: m.fullName,
+      nickname: m.nickname,
+    }));
+    const { matchedMemberIds, unmatchedNames } = await extractPlayersFromScreenshot(
+      base64Data,
+      mediaType as (typeof allowed)[number],
+      roster,
+      meId,
+    );
+    return { ok: true, matchedMemberIds, unmatchedNames };
+  } catch (e: unknown) {
+    const error = e instanceof Error ? e.message : "Could not read the screenshot.";
+    return { ok: false, error, ...empty };
+  }
 }

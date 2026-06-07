@@ -46,3 +46,15 @@ export function splitwiseOAuthClientId(): string {
 export function splitwiseOAuthClientSecret(): string {
   return process.env.SPLITWISE_OAUTH_CLIENT_SECRET || "";
 }
+
+// ---------- Anthropic vision ("add session from screenshot") ----------
+
+// Optional. When unset, the "from screenshot" button is hidden and the action
+// refuses — the rest of the app is unaffected.
+export function anthropicApiKey(): string {
+  return process.env.ANTHROPIC_API_KEY || "";
+}
+
+export function visionModel(): string {
+  return process.env.BIRDIE_VISION_MODEL || "claude-haiku-4-5";
+}
