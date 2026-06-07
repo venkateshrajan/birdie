@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { clearSession, requireAdmin } from "@/lib/session";
 import { clearChat, setRates } from "@/lib/queries";
 import {
@@ -24,6 +24,9 @@ async function mutate(fn: () => Promise<void> | void): Promise<ActionResult> {
     const error = e instanceof Error ? e.message : "Something went wrong.";
     return { ok: false, error, data: await getAdminData() };
   }
+  // Our own write changed Splitwise — mark the cached ledger stale so the next
+  // public visit refreshes (the TTL is the hard timer for direct Splitwise edits).
+  revalidateTag("ledger", "max");
   revalidatePath("/");
   revalidatePath("/admin");
   return { ok: true, data: await getAdminData() };

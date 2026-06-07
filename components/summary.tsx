@@ -56,7 +56,7 @@ export function PeopleTable({
             Days
           </TableHead>
           <TableHead className="text-right font-bold uppercase tracking-wide text-ink">
-            Owes
+            Balance
           </TableHead>
         </TableRow>
       </TableHeader>
@@ -76,7 +76,13 @@ export function PeopleTable({
             </TableCell>
             <TableCell className="money text-center">{row.days}</TableCell>
             <TableCell className="money text-right text-base font-bold">
-              {formatINR(row.owed)}
+              {row.owed > 0 ? (
+                <span className="text-red">{formatINR(row.owed)}</span>
+              ) : row.owed < 0 ? (
+                <span className="text-court-2">{formatINR(-row.owed)} back</span>
+              ) : (
+                <span className="text-muted-foreground">settled</span>
+              )}
             </TableCell>
           </TableRow>
         ))}

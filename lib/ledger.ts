@@ -1,4 +1,5 @@
 import "server-only";
+import { unstable_cache } from "next/cache";
 import {
   getCurrentUserId,
   getMembers,
@@ -10,6 +11,22 @@ import { getNicknameMap } from "./nicknames";
 import { getSettings } from "./queries";
 import type { LogRow, Stats, SummaryRow } from "./queries";
 import type { AdminData, AdminMember, AdminSession } from "./admin-types";
+
+// The slow part of every view is the Splitwise round-trip (group + all
+// expenses, ~2.5s). The group can also be edited directly in the Splitwise app,
+// so we cache it on a HARD TIMER (TTL) rather than relying only on write-event
+// invalidation. Birdie's own admin writes additionally bust the "ledger" tag so
+// they appear immediately (see app/admin/actions.ts). Tune via LEDGER_TTL_SECONDS.
+export const LEDGER_TTL_SECONDS = 60;
+
+const getCachedGroupData = unstable_cache(
+  async (): Promise<{ members: SplitwiseMember[]; sessions: Session[] }> => {
+    const [members, sessions] = await Promise.all([getMembers(), listSessions()]);
+    return { members, sessions };
+  },
+  ["birdie-group-data"],
+  { revalidate: LEDGER_TTL_SECONDS, tags: ["ledger"] },
+);
 
 // Derives Birdie's views directly from the Splitwise group (source of truth)
 // instead of a local SQLite copy. One Splitwise expense = one game session
@@ -82,7 +99,7 @@ function computeSummary(
 }
 
 export async function getLedger(): Promise<LedgerData> {
-  const [members, sessions] = await Promise.all([getMembers(), listSessions()]);
+  const { members, sessions } = await getCachedGroupData();
   const names = displayNames(members, getNicknameMap());
 
   const log: LogRow[] = sortNewestFirst(sessions).map((s) => ({
@@ -104,10 +121,12 @@ export async function getLedger(): Promise<LedgerData> {
 }
 
 export async function getAdminData(): Promise<AdminData> {
-  const [meId, members, sessions] = await Promise.all([
-    getCurrentUserId(),
+  // Admin reads uncached so the admin always sees the freshest Splitwise state
+  // (their own writes and any direct edits in the Splitwise app).
+  const [members, sessions, meId] = await Promise.all([
     getMembers(),
     listSessions(),
+    getCurrentUserId(),
   ]);
   const nicknames = getNicknameMap();
   const names = displayNames(members, nicknames);

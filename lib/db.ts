@@ -9,27 +9,11 @@ import { todayStr } from "./dates";
 // a new handle on every module reload.
 const globalForDb = globalThis as unknown as { __birdieDb?: Database.Database };
 
+// Birdie's ledger lives in Splitwise now (see lib/splitwise.ts); SQLite only
+// holds local state: rates (in settings), chat history, the Claude session id,
+// and member nicknames. The legacy people/game_days/attendance tables were
+// dropped in migration v3.
 const SCHEMA = `
-CREATE TABLE IF NOT EXISTS people (
-  id          INTEGER PRIMARY KEY AUTOINCREMENT,
-  name        TEXT NOT NULL,
-  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
-);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_people_name_nocase ON people (name COLLATE NOCASE);
-
-CREATE TABLE IF NOT EXISTS game_days (
-  date        TEXT PRIMARY KEY,           -- 'YYYY-MM-DD'
-  amount      INTEGER NOT NULL,           -- amount per person in rupees
-  skipped     INTEGER NOT NULL DEFAULT 0, -- 0 = played, 1 = skipped
-  updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS attendance (
-  game_date   TEXT NOT NULL REFERENCES game_days(date) ON DELETE CASCADE,
-  person_id   INTEGER NOT NULL REFERENCES people(id)   ON DELETE CASCADE,
-  PRIMARY KEY (game_date, person_id)
-);
-
 CREATE TABLE IF NOT EXISTS settings (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL
@@ -37,12 +21,13 @@ CREATE TABLE IF NOT EXISTS settings (
 `;
 
 // Ordered, idempotent migrations. The array index + 1 is the resulting
-// PRAGMA user_version, so adding a new entry = a new migration step.
+// PRAGMA user_version, so adding a new entry = a new migration step. Existing
+// databases only run steps past their current version; fresh databases run all
+// of them on top of SCHEMA above.
 const MIGRATIONS: ((db: Database.Database) => void)[] = [
-  // v0 -> v1: Splitwise sync tracking + chat history
+  // v0 -> v1: chat history. (Originally also added Splitwise sync columns to
+  // game_days, but that table was removed in v3, so only chat_messages remains.)
   (db) => {
-    db.exec("ALTER TABLE game_days ADD COLUMN splitwise_expense_id INTEGER");
-    db.exec("ALTER TABLE game_days ADD COLUMN synced_at TEXT");
     db.exec(`CREATE TABLE IF NOT EXISTS chat_messages (
       id          INTEGER PRIMARY KEY AUTOINCREMENT,
       role        TEXT NOT NULL,            -- 'user' | 'assistant'
@@ -57,6 +42,13 @@ const MIGRATIONS: ((db: Database.Database) => void)[] = [
       member_id INTEGER PRIMARY KEY,
       nickname  TEXT NOT NULL
     )`);
+  },
+  // v2 -> v3: drop the legacy local ledger tables — Splitwise is the source of
+  // truth, so these are unused. (Order matters: attendance references the others.)
+  (db) => {
+    db.exec("DROP TABLE IF EXISTS attendance");
+    db.exec("DROP TABLE IF EXISTS game_days");
+    db.exec("DROP TABLE IF EXISTS people");
   },
 ];
 
