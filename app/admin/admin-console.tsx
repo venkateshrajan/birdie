@@ -148,21 +148,23 @@ export function AdminConsole({
         toast.error(res.error ?? "Couldn't read the screenshot.");
         return;
       }
-      // Merge into the current selection (host already excluded server-side),
-      // so multiple screenshots for the same day accumulate. Review, then Add.
+      // Merge players into the current selection (host excluded + non-roster
+      // names ignored server-side) so multiple screenshots for the same day
+      // accumulate. Adopt the screenshot's date too (which re-derives the
+      // per-head rate) — but never override the date mid-edit.
       setForm((f) => ({
         ...f,
+        date: f.editingExpenseId === null && res.date ? res.date : f.date,
         attendees: [...new Set([...f.attendees, ...res.matchedMemberIds])],
       }));
       const n = res.matchedMemberIds.length;
-      if (n === 0 && res.unmatchedNames.length === 0) {
-        toast.error("No players found in that screenshot.");
+      if (n === 0) {
+        toast.error("No roster players found in that screenshot.");
       } else {
-        let msg = `Selected ${n} player${n === 1 ? "" : "s"} — review and add.`;
-        if (res.unmatchedNames.length) {
-          msg += ` Couldn't match: ${res.unmatchedNames.join(", ")}.`;
-        }
-        toast.success(msg);
+        const datePart = res.date ? ` for ${prettyDate(res.date)}` : "";
+        toast.success(
+          `Selected ${n} player${n === 1 ? "" : "s"}${datePart} — review and add.`,
+        );
       }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Couldn't read the screenshot.");

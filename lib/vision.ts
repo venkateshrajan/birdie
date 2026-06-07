@@ -2,13 +2,14 @@ import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { anthropicApiKey, visionModel } from "./env";
 
-// Reads a Playo booking screenshot and works out which roster members played.
+// Reads a Playo booking screenshot and works out which roster members played
+// and (when shown) the session date.
 //
 // The Claude CLI used elsewhere (chat) cannot ingest images in headless mode,
 // so screenshot reading goes straight to the Anthropic Messages API. The model
 // does the fuzzy name → member matching (Playo display names are often informal
 // or partial); we keep code in charge of the hard rules: only real member ids
-// survive, and the host is always dropped.
+// survive, the host is always dropped, and anyone not in the roster is ignored.
 
 export interface RosterEntry {
   id: number;
@@ -22,14 +23,16 @@ export interface RosterEntry {
 export interface ScreenshotPlayers {
   /** Roster member ids found in the screenshot, host already removed. */
   matchedMemberIds: number[];
-  /** Player names read off the screenshot that no member matched. */
-  unmatchedNames: string[];
+  /** Session date as YYYY-MM-DD if the screenshot showed one, else null. */
+  date: string | null;
 }
 
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
 const TOOL: Anthropic.Tool = {
-  name: "report_players",
+  name: "report_session",
   description:
-    "Report the badminton players found in the booking screenshot, matched to the roster.",
+    "Report the badminton players (matched to the roster) and the session date found in the screenshot.",
   input_schema: {
     type: "object",
     properties: {
@@ -37,20 +40,23 @@ const TOOL: Anthropic.Tool = {
         type: "array",
         items: { type: "integer" },
         description:
-          "Roster member ids for each player you confidently matched. Use only ids from the roster.",
+          "Roster member ids for each player you matched. Use only ids from the roster; omit anyone not in the roster.",
       },
-      unmatchedNames: {
-        type: "array",
-        items: { type: "string" },
+      date: {
+        type: "string",
         description:
-          "Player names you read in the screenshot but could not confidently match to a roster member.",
+          'Session date as YYYY-MM-DD if the screenshot shows one, otherwise an empty string "".',
       },
     },
-    required: ["matchedMemberIds", "unmatchedNames"],
+    required: ["matchedMemberIds", "date"],
   },
 };
 
-function buildPrompt(roster: RosterEntry[], hostId: number): string {
+function buildPrompt(
+  roster: RosterEntry[],
+  hostId: number,
+  today: string,
+): string {
   const lines = roster.map((m) => {
     const parts = [`id=${m.id}`, `name="${m.fullName}"`];
     if (m.nickname) parts.push(`nickname="${m.nickname}"`);
@@ -58,21 +64,30 @@ function buildPrompt(roster: RosterEntry[], hostId: number): string {
   });
   return [
     "This is a screenshot from the Playo app for a badminton session.",
-    "Identify the individual people who played (the participants/players list).",
-    "Ignore non-player text: court names, prices, dates, times, sport names, and UI labels/buttons.",
     "",
-    "Match each player to a member in this roster. Names may be informal,",
-    "partial, abbreviated, or differently cased/spelled — match on best effort",
-    "against the name and nickname.",
+    "Two things to extract:",
+    "",
+    "1) DATE: the date of the session shown in the screenshot, as YYYY-MM-DD.",
+    `   Today is ${today}. If the screenshot shows a date without a year,`,
+    "   choose the year that makes the date closest to today. If no date is",
+    '   visible at all, return an empty string "".',
+    "",
+    "2) PLAYERS: the individual people who played (the participants list).",
+    "   Match each to a member in the roster below — names may be informal,",
+    "   partial, abbreviated, or differently cased/spelled; match on best",
+    "   effort against the name and nickname.",
+    "   - If a name in the screenshot does NOT correspond to any roster member,",
+    "     IGNORE it (do not include it anywhere).",
+    `   - member id=${hostId} is the host: NEVER include the host, even if`,
+    "     their name appears.",
+    "",
+    "Ignore non-player UI text: court names, prices, times, sport names, buttons.",
     "",
     "ROSTER:",
     ...lines,
     "",
-    `IMPORTANT: member id=${hostId} is the host. NEVER include the host in`,
-    "matchedMemberIds, even if their name appears in the screenshot.",
-    "",
-    "Call report_players with the member ids you matched (excluding the host)",
-    "and any player names you could not match.",
+    "Call report_session with the matched member ids (host excluded, non-roster",
+    "names omitted) and the date.",
   ].join("\n");
 }
 
@@ -81,6 +96,7 @@ export async function extractPlayersFromScreenshot(
   mediaType: "image/png" | "image/jpeg" | "image/webp" | "image/gif",
   roster: RosterEntry[],
   hostId: number,
+  today: string,
 ): Promise<ScreenshotPlayers> {
   const apiKey = anthropicApiKey();
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not configured.");
@@ -90,7 +106,7 @@ export async function extractPlayersFromScreenshot(
     model: visionModel(),
     max_tokens: 1024,
     tools: [TOOL],
-    tool_choice: { type: "tool", name: "report_players" },
+    tool_choice: { type: "tool", name: "report_session" },
     messages: [
       {
         role: "user",
@@ -99,7 +115,7 @@ export async function extractPlayersFromScreenshot(
             type: "image",
             source: { type: "base64", media_type: mediaType, data: base64Data },
           },
-          { type: "text", text: buildPrompt(roster, hostId) },
+          { type: "text", text: buildPrompt(roster, hostId, today) },
         ],
       },
     ],
@@ -109,10 +125,7 @@ export async function extractPlayersFromScreenshot(
   if (!block || block.type !== "tool_use") {
     throw new Error("Could not read the screenshot. Try a clearer image.");
   }
-  const input = block.input as {
-    matchedMemberIds?: unknown;
-    unmatchedNames?: unknown;
-  };
+  const input = block.input as { matchedMemberIds?: unknown; date?: unknown };
 
   // Trust nothing from the model: keep only real member ids, drop the host,
   // and dedupe. The model's matching is a suggestion; these rules are not.
@@ -126,11 +139,8 @@ export async function extractPlayersFromScreenshot(
     ),
   ];
 
-  const rawNames = Array.isArray(input.unmatchedNames) ? input.unmatchedNames : [];
-  const unmatchedNames = rawNames
-    .map((s) => String(s).trim())
-    .filter((s) => s.length > 0)
-    .slice(0, 20);
+  const rawDate = typeof input.date === "string" ? input.date.trim() : "";
+  const date = ISO_DATE.test(rawDate) ? rawDate : null;
 
-  return { matchedMemberIds, unmatchedNames };
+  return { matchedMemberIds, date };
 }
