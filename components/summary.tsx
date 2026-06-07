@@ -31,7 +31,13 @@ export function StatStrip({ stats }: { stats: Stats }) {
   );
 }
 
-export function PeopleTable({ summary }: { summary: SummaryRow[] }) {
+export function PeopleTable({
+  summary,
+  highlightId,
+}: {
+  summary: SummaryRow[];
+  highlightId?: number;
+}) {
   if (summary.length === 0) {
     return (
       <p className="py-6 text-center text-sm text-muted-foreground">
@@ -56,8 +62,18 @@ export function PeopleTable({ summary }: { summary: SummaryRow[] }) {
       </TableHeader>
       <TableBody>
         {summary.map((row) => (
-          <TableRow key={row.id} className="border-ink/15">
-            <TableCell className="font-semibold">{row.name}</TableCell>
+          <TableRow
+            key={row.id}
+            className={cn("border-ink/15", row.id === highlightId && "bg-lime/30")}
+          >
+            <TableCell className="font-semibold">
+              {row.name}
+              {row.id === highlightId && (
+                <span className="ml-2 text-xs font-bold uppercase tracking-wide text-court-2">
+                  you
+                </span>
+              )}
+            </TableCell>
             <TableCell className="money text-center">{row.days}</TableCell>
             <TableCell className="money text-right text-base font-bold">
               {formatINR(row.owed)}
@@ -90,7 +106,7 @@ export function DayLog({
       {log.map((d) => {
         const clickable = !!onDayClick;
         return (
-          <li key={d.date}>
+          <li key={d.splitwiseExpenseId ?? d.date}>
             <button
               type="button"
               disabled={!clickable}

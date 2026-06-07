@@ -2,11 +2,17 @@ import "server-only";
 import { getIronSession, type SessionOptions } from "iron-session";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { timingSafeEqual } from "node:crypto";
-import { adminPassword, sessionSecret } from "./env";
+import { sessionSecret } from "./env";
+import type { Role } from "./auth";
+
+export interface SessionUser {
+  id: number;
+  name: string;
+  role: Role;
+}
 
 export interface SessionData {
-  admin?: boolean;
+  user?: SessionUser;
 }
 
 function sessionOptions(): SessionOptions {
@@ -23,69 +29,42 @@ function sessionOptions(): SessionOptions {
 }
 
 export async function getSession() {
-  // cookies() is async in Next.js 16.
   const cookieStore = await cookies();
   return getIronSession<SessionData>(cookieStore, sessionOptions());
 }
 
+export async function getSessionUser(): Promise<SessionUser | null> {
+  const session = await getSession();
+  return session.user ?? null;
+}
+
 export async function isAdmin(): Promise<boolean> {
+  const user = await getSessionUser();
+  return user?.role === "admin";
+}
+
+export async function setSessionUser(user: SessionUser): Promise<void> {
   const session = await getSession();
-  return session.admin === true;
-}
-
-/** Guard for admin pages / server actions. Redirects to login when not admin. */
-export async function requireAdmin(): Promise<void> {
-  if (!(await isAdmin())) redirect("/admin/login");
-}
-
-/** Constant-time password check against ADMIN_PASSWORD. */
-export function passwordMatches(submitted: string): boolean {
-  const expected = adminPassword();
-  const a = Buffer.from(submitted);
-  const b = Buffer.from(expected);
-  if (a.length !== b.length) {
-    // Still do a comparison to keep timing roughly constant.
-    timingSafeEqual(b, b);
-    return false;
-  }
-  return timingSafeEqual(a, b);
-}
-
-export async function loginAdmin(): Promise<void> {
-  const session = await getSession();
-  session.admin = true;
+  session.user = user;
   await session.save();
 }
 
-export async function logoutAdmin(): Promise<void> {
+export async function clearSession(): Promise<void> {
   const session = await getSession();
   session.destroy();
 }
 
-// ---------- Simple in-memory login rate limiter ----------
-// 5 attempts / 15 min per IP. Resets on server restart (acceptable for one admin).
-
-const WINDOW_MS = 15 * 60 * 1000;
-const MAX_ATTEMPTS = 5;
-const attempts = new Map<string, { count: number; first: number }>();
-
-export function loginAllowed(ip: string): boolean {
-  const now = Date.now();
-  const rec = attempts.get(ip);
-  if (!rec || now - rec.first > WINDOW_MS) return true;
-  return rec.count < MAX_ATTEMPTS;
+/** Guard for any authenticated view. Sends anonymous visitors to login. */
+export async function requireMember(): Promise<SessionUser> {
+  const user = await getSessionUser();
+  if (!user) redirect("/login");
+  return user;
 }
 
-export function recordFailedLogin(ip: string): void {
-  const now = Date.now();
-  const rec = attempts.get(ip);
-  if (!rec || now - rec.first > WINDOW_MS) {
-    attempts.set(ip, { count: 1, first: now });
-  } else {
-    rec.count += 1;
-  }
-}
-
-export function clearLoginAttempts(ip: string): void {
-  attempts.delete(ip);
+/** Guard for admin-only views. Members are bounced to the dashboard. */
+export async function requireAdmin(): Promise<SessionUser> {
+  const user = await getSessionUser();
+  if (!user) redirect("/login");
+  if (user.role !== "admin") redirect("/");
+  return user;
 }

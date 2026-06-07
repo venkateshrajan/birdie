@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { splitwiseApiKey, splitwiseGroupName } from "./env";
-import { getDaysMap, getPeople, getSummary } from "./queries";
+import { getLedger } from "./ledger";
 import { dayTypeLabel } from "./dates";
 
 // MCP tool names follow `mcp__<server>__<tool>`. Our server key is "splitwise".
@@ -38,61 +38,39 @@ function mcpConfig(): string {
 export const SYNC_TAG = "Birdie";
 
 /** Builds the rules + live ledger snapshot injected into every chat turn. */
-export function buildLedgerContext(): string {
+export async function buildLedgerContext(): Promise<string> {
   const group = splitwiseGroupName();
-  const people = getPeople();
-  const days = getDaysMap();
-  const summary = getSummary();
+  const { summary, log } = await getLedger();
 
-  const nameById = new Map(people.map((p) => [p.id, p.name]));
+  // The Splitwise group itself is now the source of truth, so the ledger here
+  // mirrors live Splitwise data. Show recent sessions and net balances.
+  const recent = log.slice(0, 40).map((d) => {
+    const tag = `${SYNC_TAG}:${d.date}`;
+    return `- date=${d.date} (${dayTypeLabel(d.date)}) tag="${tag}" total=₹${d.dayTotal} per_person=₹${d.amount} attendees=[${d.names.join(", ")}] expense_id=${d.splitwiseExpenseId ?? "?"}`;
+  });
 
-  const unsynced: string[] = [];
-  const synced: string[] = [];
-  for (const [date, rec] of Object.entries(days).sort()) {
-    if (rec.skipped) continue;
-    if (rec.attendeeIds.length === 0) continue;
-    const names = rec.attendeeIds.map((id) => nameById.get(id) ?? `#${id}`);
-    const total = rec.amount * rec.attendeeIds.length;
-    const tag = `${SYNC_TAG}:${date}`;
-    if (rec.syncedAt && rec.splitwiseExpenseId) {
-      synced.push(`- ${date} (${dayTypeLabel(date)}): expense_id ${rec.splitwiseExpenseId}, ₹${rec.amount}/person × ${names.length}`);
-    } else {
-      const upd = rec.splitwiseExpenseId
-        ? ` [UPDATE existing expense_id ${rec.splitwiseExpenseId}]`
-        : "";
-      unsynced.push(
-        `- date=${date} (${dayTypeLabel(date)}) tag="${tag}" total=₹${total} per_person=₹${rec.amount} attendees=[${names.join(", ")}]${upd}`,
-      );
-    }
-  }
-
-  const owes = summary.map((s) => `- ${s.name}: ₹${s.owed} over ${s.days} day(s)`);
+  const balances = summary.map((s) => {
+    const state = s.owed > 0 ? `owes ₹${s.owed}` : s.owed < 0 ? `is owed ₹${-s.owed}` : "settled";
+    return `- ${s.name}: ${state} (${s.days} session${s.days === 1 ? "" : "s"})`;
+  });
 
   return [
-    `## RULES (follow exactly)`,
+    `## CONTEXT`,
+    `- The Splitwise group "${group}" is the single source of truth. Every game session is already a Splitwise expense; there is nothing to "sync" or "push" separately.`,
+    `- Your job is to answer questions about the ledger and, when explicitly asked, create/adjust expenses in this group.`,
+    ``,
+    `## RULES (follow exactly when writing)`,
     `- The only Splitwise group you may touch is "${group}". Find its group_id via list_groups/get_group.`,
-    `- Currency is always INR. Amounts are whole rupees.`,
-    `- The payer is the authenticated user (the host). Do NOT set payer_id; let it default. The host never owes.`,
-    `- Create ONE expense per game day. NEVER use split_type="equal" (it splits across ALL group members). Always use split_type="exact" with a "shares" array listing ONLY that day's attendees, each owing the per-person amount. The shares must sum to the day total.`,
-    `- Set the expense description to start with its tag exactly, e.g. "Birdie:2026-06-06 — Badminton". The date in the tag identifies the day.`,
-    `- Match each Birdie attendee to a Splitwise group member BY NAME. If any attendee has no clear match, STOP and report which name is unmatched instead of guessing.`,
-    `- For a day marked [UPDATE existing expense_id N], call update_expense on N rather than creating a new one.`,
+    `- Currency is always INR, whole rupees.`,
+    `- Use split_type="exact" with a "shares" array listing ONLY that session's attendees, each owing the per-person amount; shares must sum to the total. NEVER split_type="equal".`,
+    `- Match attendee names to Splitwise members BY NAME. If a name is ambiguous, STOP and ask rather than guessing.`,
     `- You have NO file, shell, or web tools — rely only on the data below and the Splitwise tools.`,
     ``,
-    `## SPLITWISE GROUP`,
-    group,
+    `## NET BALANCES (positive = owes the group)`,
+    balances.join("\n") || "(nobody owes anything)",
     ``,
-    `## ROSTER`,
-    people.map((p) => `- ${p.name}`).join("\n") || "(no players)",
-    ``,
-    `## GAME DAYS NOT YET SYNCED (push these when asked)`,
-    unsynced.join("\n") || "(none — all caught up)",
-    ``,
-    `## GAME DAYS ALREADY SYNCED`,
-    synced.join("\n") || "(none)",
-    ``,
-    `## CURRENT BALANCES IN BIRDIE (for questions)`,
-    owes.join("\n") || "(nobody owes anything)",
+    `## RECENT SESSIONS (latest 40)`,
+    recent.join("\n") || "(none)",
   ].join("\n");
 }
 
@@ -126,7 +104,7 @@ export async function* runClaude({
   mkdirSync(RUN_DIR, { recursive: true });
 
   const allowed = write ? [...READ_TOOLS, ...WRITE_TOOLS] : READ_TOOLS;
-  const prompt = `${buildLedgerContext()}\n\n## USER MESSAGE\n${message}`;
+  const prompt = `${await buildLedgerContext()}\n\n## USER MESSAGE\n${message}`;
 
   const args = [
     "-p",
