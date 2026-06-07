@@ -335,26 +335,26 @@ export function AdminConsole({
                   Who played
                 </Label>
                 <div className="flex items-center gap-2">
-                  {screenshotEnabled && (
-                    <>
-                      <input
-                        ref={fileRef}
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={(e) => onScreenshot(e.target.files?.[0])}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => fileRef.current?.click()}
-                        disabled={busy || reading}
-                        title="Read players from a Playo screenshot (you are excluded)"
-                        className="rounded-[4px] border-2 border-ink bg-lime px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-ink disabled:opacity-50"
-                      >
-                        {reading ? "📷 reading…" : "📷 screenshot"}
-                      </button>
-                    </>
-                  )}
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => onScreenshot(e.target.files?.[0])}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileRef.current?.click()}
+                    disabled={!screenshotEnabled || busy || reading}
+                    title={
+                      screenshotEnabled
+                        ? "Read players from a Playo screenshot (you are excluded)"
+                        : "Coming soon — reads players from a Playo screenshot. Needs ANTHROPIC_API_KEY set on the server."
+                    }
+                    className="rounded-[4px] border-2 border-ink bg-lime px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-ink disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {reading ? "📷 reading…" : "📷 screenshot"}
+                  </button>
                   <button
                     type="button"
                     onClick={() =>
