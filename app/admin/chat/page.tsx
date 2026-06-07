@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/session";
-import { getChatMessages, getStats } from "@/lib/queries";
+import { getChatMessages } from "@/lib/queries";
+import { getLedger } from "@/lib/ledger";
 import { splitwiseApiKey, splitwiseGroupName } from "@/lib/env";
 import { SiteHeader } from "@/components/site-header";
 import { buttonVariants } from "@/components/ui/button";
@@ -13,7 +14,7 @@ export default async function ChatPage() {
   await requireAdmin();
 
   const messages = getChatMessages();
-  const stats = getStats();
+  const { stats } = await getLedger();
   const group = splitwiseGroupName();
   const keyConfigured = splitwiseApiKey().length > 0;
 

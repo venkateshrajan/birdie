@@ -3,7 +3,6 @@ import { runClaude } from "@/lib/claude";
 import {
   appendChatMessage,
   getClaudeSessionId,
-  markDaySynced,
   setClaudeSessionId,
 } from "@/lib/queries";
 
@@ -55,8 +54,9 @@ export async function POST(request: Request) {
               send({ type: "tool_done" });
               break;
             case "synced":
+              // The Splitwise group is the source of truth, so there is no
+              // local row to mark synced — just surface it to the client.
               if (ev.date && ev.expenseId) {
-                markDaySynced(ev.date, ev.expenseId);
                 send({ type: "synced", date: ev.date, expenseId: ev.expenseId });
               }
               break;

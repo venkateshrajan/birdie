@@ -1,4 +1,4 @@
-import { getLog, getSummary } from "@/lib/queries";
+import { getLedger } from "@/lib/ledger";
 import { weekdayName } from "@/lib/dates";
 
 export const dynamic = "force-dynamic";
@@ -14,20 +14,18 @@ function row(cells: (string | number)[]): string {
 }
 
 export async function GET() {
-  const log = getLog();
-  const summary = getSummary();
+  const { log, summary } = await getLedger();
 
   const lines: string[] = [];
 
-  // Per-day block
-  lines.push(row(["Date", "Day", "Status", "Rate", "Players", "Day total", "Names"]));
+  // Per-session block (one row per Splitwise expense)
+  lines.push(row(["Date", "Day", "Rate", "Players", "Session total", "Names"]));
   for (const d of log) {
     lines.push(
       row([
         d.date,
         weekdayName(d.date),
-        d.skipped ? "Skipped" : "Played",
-        d.skipped ? 0 : d.amount,
+        d.amount,
         d.count,
         d.dayTotal,
         d.names.join(", "),
@@ -35,9 +33,9 @@ export async function GET() {
     );
   }
 
-  // Spacer + per-person summary block
+  // Spacer + per-person net-balance block
   lines.push("");
-  lines.push(row(["Player", "Days played", "Amount owed"]));
+  lines.push(row(["Player", "Sessions", "Net owed"]));
   for (const p of summary) {
     lines.push(row([p.name, p.days, p.owed]));
   }
