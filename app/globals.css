@@ -1,0 +1,109 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ---- Birdie palette + fonts registered as Tailwind utilities ---- */
+@theme {
+  --color-court: #0d3b2e;
+  --color-court-2: #12513e;
+  --color-lime: #ccff33;
+  --color-lime-d: #aee600;
+  --color-ink: #111110;
+  --color-paper: #f3efe3;
+  --color-paper-2: #fbf9f2;
+  --color-red: #ff5436;
+
+  --font-sans: var(--font-sora), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-space-mono), ui-monospace, monospace;
+  --font-display: var(--font-anton), Impact, sans-serif;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: 2px;
+  --radius-md: 3px;
+  --radius-lg: 4px;
+  --radius-xl: 6px;
+}
+
+/* Map shadcn semantic tokens onto the scoreboard palette */
+:root {
+  --radius: 4px;
+  --background: #f3efe3;
+  --foreground: #111110;
+  --card: #fbf9f2;
+  --card-foreground: #111110;
+  --popover: #fbf9f2;
+  --popover-foreground: #111110;
+  --primary: #ccff33;
+  --primary-foreground: #111110;
+  --secondary: #0d3b2e;
+  --secondary-foreground: #f3efe3;
+  --muted: #e8e2d2;
+  --muted-foreground: #5c5a50;
+  --accent: #ccff33;
+  --accent-foreground: #111110;
+  --destructive: #ff5436;
+  --border: #111110;
+  --input: #111110;
+  --ring: #aee600;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    background-image: radial-gradient(rgba(13, 59, 46, 0.14) 1.4px, transparent 1.4px);
+    background-size: 22px 22px;
+    background-attachment: fixed;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+@layer components {
+  /* Thick black border + hard offset shadow — the core neo-brutalist card */
+  .nb {
+    @apply border-[3px] border-ink rounded-[4px];
+    box-shadow: 6px 6px 0 var(--color-ink);
+  }
+  .nb-sm {
+    @apply border-[3px] border-ink rounded-[4px];
+    box-shadow: 4px 4px 0 var(--color-ink);
+  }
+  /* Chunky button that depresses on click */
+  .nb-press {
+    @apply transition-all duration-75 active:translate-x-[3px] active:translate-y-[3px];
+  }
+  .nb-press:active {
+    box-shadow: 0 0 0 var(--color-ink) !important;
+  }
+  .money {
+    @apply font-mono tabular-nums;
+  }
+  .display {
+    @apply font-display tracking-wide uppercase;
+  }
+}
