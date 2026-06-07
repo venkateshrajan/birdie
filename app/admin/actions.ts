@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { clearSession, requireAdmin } from "@/lib/session";
-import { clearChat, setRates } from "@/lib/queries";
+import { clearChat, setAdvanceConfig, setRates } from "@/lib/queries";
 import {
   createSession,
   deleteSession,
@@ -12,10 +12,11 @@ import {
 } from "@/lib/splitwise";
 import { setNickname } from "@/lib/nicknames";
 import { getAdminData } from "@/lib/ledger";
+import { computeAdvance } from "@/lib/advance";
 import { extractPlayersFromScreenshot } from "@/lib/vision";
 import { anthropicApiKey } from "@/lib/env";
 import type { Rates } from "@/lib/dates";
-import type { ActionResult, ScreenshotResult } from "@/lib/admin-types";
+import type { ActionResult, AdvanceConfig, ScreenshotResult } from "@/lib/admin-types";
 
 /** Run a guarded mutation, then return fresh admin data (or the error). */
 async function mutate(fn: () => Promise<void> | void): Promise<ActionResult> {
@@ -102,6 +103,37 @@ export async function setNicknameAction(
 
 export async function setRatesAction(rates: Rates): Promise<ActionResult> {
   return mutate(() => setRates(rates));
+}
+
+// ---------- Monthly advance ----------
+
+export interface AdvanceMessageResult {
+  ok: boolean;
+  message?: string;
+  error?: string;
+}
+
+export async function generateAdvanceAction(
+  yearMonth: string,
+): Promise<AdvanceMessageResult> {
+  await requireAdmin();
+  const [y, m] = (yearMonth ?? "").split("-").map(Number);
+  if (!y || !m || m < 1 || m > 12) return { ok: false, error: "Pick a month." };
+  try {
+    const { message } = await computeAdvance(y, m);
+    return { ok: true, message };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Could not compute the advance.",
+    };
+  }
+}
+
+export async function saveAdvanceConfigAction(
+  config: AdvanceConfig,
+): Promise<ActionResult> {
+  return mutate(() => setAdvanceConfig(config));
 }
 
 export async function clearChatAction(): Promise<void> {

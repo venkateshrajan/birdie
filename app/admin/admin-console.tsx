@@ -15,12 +15,20 @@ import type { ActionResult, AdminData } from "@/lib/admin-types";
 import {
   createSessionAction,
   deleteSessionAction,
+  generateAdvanceAction,
   logoutAction,
   readScreenshotAction,
+  saveAdvanceConfigAction,
   setNicknameAction,
   setRatesAction,
   updateSessionAction,
 } from "./actions";
+import {
+  DEFAULT_ADVANCE_MEMBER_CFG,
+  type AdvanceConfig,
+  type AdvanceMemberCfg,
+  type AdminMember,
+} from "@/lib/admin-types";
 
 /** Downscale an image file to a small JPEG (keeps Server Action payloads well
  *  under the 1MB limit and trims vision tokens). Returns base64 (no data URL
@@ -462,6 +470,16 @@ export function AdminConsole({
             busy={busy}
             onSave={(r) => run(setRatesAction(r))}
           />
+
+          <AdvancePanel today={today} />
+
+          <AdvanceSettings
+            members={data.members}
+            meId={data.meId}
+            config={data.advanceConfig}
+            busy={busy}
+            onSave={(c) => run(saveAdvanceConfigAction(c))}
+          />
         </div>
 
         {/* RIGHT: live summary + sessions */}
@@ -610,6 +628,205 @@ function RatesForm({
       >
         Save rates
       </Button>
+    </Panel>
+  );
+}
+
+function AdvancePanel({ today }: { today: string }) {
+  const [month, setMonth] = useState(today.slice(0, 7)); // YYYY-MM
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function generate() {
+    setBusy(true);
+    try {
+      const res = await generateAdvanceAction(month);
+      if (res.ok && res.message) setMessage(res.message);
+      else toast.error(res.error ?? "Could not generate the advance.");
+    } catch {
+      toast.error("Action failed. Are you still logged in?");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(message);
+      toast.success("Copied to clipboard.");
+    } catch {
+      toast.error("Couldn't copy — select and copy manually.");
+    }
+  }
+
+  return (
+    <Panel title="Monthly advance">
+      <p className="mb-3 text-xs text-muted-foreground">
+        Computes balances up to the end of the previous month and the month’s
+        charge, then drafts the group message.
+      </p>
+      <div className="flex items-end gap-2">
+        <div className="flex-1">
+          <Label className="mb-1 block text-xs font-bold uppercase tracking-wide">
+            Month
+          </Label>
+          <Input
+            type="month"
+            value={month}
+            onChange={(e) => setMonth(e.target.value)}
+            className="money nb-sm h-11 border-[3px] bg-paper-2 text-base font-bold"
+          />
+        </div>
+        <Button
+          type="button"
+          onClick={generate}
+          disabled={busy}
+          className="nb-press h-11 border-[3px] border-ink bg-lime font-bold text-ink hover:bg-lime-d"
+        >
+          Generate
+        </Button>
+      </div>
+      {message && (
+        <div className="mt-3">
+          <textarea
+            readOnly
+            value={message}
+            rows={message.split("\n").length + 1}
+            className="money nb-sm w-full resize-y border-[3px] bg-paper-2 p-3 text-sm"
+          />
+          <Button
+            type="button"
+            onClick={copy}
+            className="nb-press mt-2 w-full border-[3px] border-ink bg-court font-bold text-paper hover:bg-court-2"
+          >
+            Copy message
+          </Button>
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri"]; // index 0..4
+
+function AdvanceSettings({
+  members,
+  meId,
+  config,
+  busy,
+  onSave,
+}: {
+  members: AdminMember[];
+  meId: number;
+  config: AdvanceConfig;
+  busy: boolean;
+  onSave: (c: AdvanceConfig) => Promise<boolean>;
+}) {
+  const [cfg, setCfg] = useState<AdvanceConfig>(config);
+
+  const memberCfg = (id: number): AdvanceMemberCfg =>
+    cfg.members[String(id)] ?? DEFAULT_ADVANCE_MEMBER_CFG;
+
+  function update(id: number, patch: Partial<AdvanceMemberCfg>) {
+    setCfg((c) => ({
+      members: { ...c.members, [String(id)]: { ...memberCfg(id), ...patch } },
+    }));
+  }
+
+  function toggleSkip(id: number, dow: number) {
+    const cur = memberCfg(id);
+    update(id, {
+      skipDows: cur.skipDows.includes(dow)
+        ? cur.skipDows.filter((d) => d !== dow)
+        : [...cur.skipDows, dow],
+    });
+  }
+
+  async function save() {
+    if (await onSave(cfg)) toast.success("Advance settings saved.");
+  }
+
+  const list = members.filter((m) => m.id !== meId); // host doesn't pay an advance
+
+  return (
+    <Panel
+      title="Advance settings"
+      action={
+        <Button
+          type="button"
+          size="sm"
+          onClick={save}
+          disabled={busy}
+          className="nb-press border-2 border-ink bg-lime text-xs font-bold text-ink hover:bg-lime-d"
+        >
+          Save
+        </Button>
+      }
+    >
+      <p className="mb-3 text-xs text-muted-foreground">
+        Who pays a monthly advance, who’s a Saturday regular, and any weekdays
+        they skip. Weekday/Saturday rates come from “Default rates”.
+      </p>
+      <ul className="flex flex-col gap-2">
+        {list.map((m) => {
+          const c = memberCfg(m.id);
+          return (
+            <li
+              key={m.id}
+              className="rounded-[3px] border-2 border-ink/20 bg-paper-2 px-3 py-2"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <label className="flex items-center gap-2 font-semibold">
+                  <input
+                    type="checkbox"
+                    checked={c.include}
+                    onChange={(e) => update(m.id, { include: e.target.checked })}
+                  />
+                  {m.name}
+                </label>
+                <label
+                  className={cn(
+                    "flex items-center gap-1 text-xs font-bold uppercase tracking-wide",
+                    !c.include && "opacity-40",
+                  )}
+                >
+                  <input
+                    type="checkbox"
+                    checked={c.saturdayRegular}
+                    disabled={!c.include}
+                    onChange={(e) =>
+                      update(m.id, { saturdayRegular: e.target.checked })
+                    }
+                  />
+                  Saturdays
+                </label>
+              </div>
+              {c.include && (
+                <div className="mt-2 flex items-center gap-1">
+                  <span className="mr-1 text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                    skips
+                  </span>
+                  {WEEKDAY_LABELS.map((lbl, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => toggleSkip(m.id, i)}
+                      className={cn(
+                        "rounded-[3px] border-2 border-ink px-2 py-0.5 text-xs font-bold",
+                        c.skipDows.includes(i)
+                          ? "bg-red text-paper"
+                          : "bg-paper text-ink/60",
+                      )}
+                    >
+                      {lbl}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
     </Panel>
   );
 }
