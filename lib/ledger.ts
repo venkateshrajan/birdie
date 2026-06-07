@@ -10,7 +10,12 @@ import {
 import { getNicknameMap } from "./nicknames";
 import { getAdvanceConfig, getSettings } from "./queries";
 import type { LogRow, Stats, SummaryRow } from "./queries";
-import type { AdminData, AdminMember, AdminSession } from "./admin-types";
+import type {
+  AdminData,
+  AdminMember,
+  AdminSession,
+  LastAdvance,
+} from "./admin-types";
 
 // The slow part of every view is the Splitwise round-trip (group + all
 // expenses, ~2.5s). The group can also be edited directly in the Splitwise app,
@@ -53,6 +58,25 @@ function isMoneyIn(s: Session, hostId: number): boolean {
 
 function gameOnly(sessions: Session[], hostId: number): Session[] {
   return sessions.filter((s) => !isMoneyIn(s, hostId));
+}
+
+/** memberId -> their most recent advance payment (money-in tagged "advance"). */
+function lastAdvancePerMember(
+  sessions: Session[],
+  hostId: number,
+): Record<string, LastAdvance> {
+  const latest: Record<string, LastAdvance> = {};
+  for (const s of sessions) {
+    if (!isMoneyIn(s, hostId)) continue;
+    if (!/advance/i.test(s.description)) continue;
+    const payer = s.payerId;
+    if (payer == null) continue;
+    const key = String(payer);
+    if (!latest[key] || s.date > latest[key].date) {
+      latest[key] = { date: s.date, amount: Math.round(s.total) };
+    }
+  }
+  return latest;
 }
 
 // Derives Birdie's views directly from the Splitwise group (source of truth)
@@ -189,5 +213,6 @@ export async function getAdminData(): Promise<AdminData> {
     stats: computeStats(members, games),
     summary: computeSummary(members, games, names),
     advanceConfig: getAdvanceConfig(),
+    lastAdvances: lastAdvancePerMember(sessions, meId),
   };
 }

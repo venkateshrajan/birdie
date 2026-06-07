@@ -18,6 +18,7 @@ import {
   type AdminMember,
   type AdvanceConfig,
   type AdvanceMemberCfg,
+  type LastAdvance,
 } from "@/lib/admin-types";
 import {
   createSessionAction,
@@ -483,6 +484,12 @@ export function AdminConsole({
             }
           />
 
+          <AdvancePaymentsPanel
+            members={data.members}
+            config={data.advanceConfig}
+            lastAdvances={data.lastAdvances}
+          />
+
           <AdvanceSettings
             members={data.members}
             meId={data.meId}
@@ -795,6 +802,63 @@ function AdvancePanel({
             })}
           </ul>
         </div>
+      )}
+    </Panel>
+  );
+}
+
+function AdvancePaymentsPanel({
+  members,
+  config,
+  lastAdvances,
+}: {
+  members: AdminMember[];
+  config: AdvanceConfig;
+  lastAdvances: Record<string, LastAdvance>;
+}) {
+  const rows = members
+    .filter((m) => config.members[String(m.id)]?.include)
+    .map((m) => ({ member: m, last: lastAdvances[String(m.id)] }))
+    .sort((a, b) => {
+      // Most recently paid first; never-paid sink to the bottom.
+      const da = a.last?.date ?? "";
+      const db = b.last?.date ?? "";
+      if (da !== db) return da < db ? 1 : -1;
+      return a.member.name.localeCompare(b.member.name);
+    });
+
+  return (
+    <Panel title="Advance payments">
+      <p className="mb-3 text-xs text-muted-foreground">
+        When each person last paid an advance.
+      </p>
+      {rows.length === 0 ? (
+        <p className="py-4 text-center text-sm text-muted-foreground">
+          No one is set up for advances yet.
+        </p>
+      ) : (
+        <ul className="flex flex-col gap-2">
+          {rows.map(({ member, last }) => (
+            <li
+              key={member.id}
+              className="flex items-center justify-between gap-2 rounded-[3px] border-2 border-ink/20 bg-paper-2 px-3 py-2"
+            >
+              <span className="font-semibold">{member.name}</span>
+              {last ? (
+                <span className="money text-right text-sm">
+                  <span className="font-bold">{formatINR(last.amount)}</span>
+                  <span className="ml-2 text-muted-foreground">
+                    {prettyDate(last.date)}
+                  </span>
+                </span>
+              ) : (
+                <span className="text-xs font-bold uppercase tracking-wide text-red">
+                  not recorded
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
       )}
     </Panel>
   );

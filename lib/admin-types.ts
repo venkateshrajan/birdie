@@ -23,6 +23,12 @@ export interface AdminSession {
   names: string[];
 }
 
+/** The most recent advance a member paid (from the advance-tagged money-in expenses). */
+export interface LastAdvance {
+  date: string; // YYYY-MM-DD
+  amount: number;
+}
+
 export interface AdminData {
   /** Current Splitwise user (the API-key owner) — default payer. */
   meId: number;
@@ -32,6 +38,8 @@ export interface AdminData {
   stats: Stats;
   summary: SummaryRow[];
   advanceConfig: AdvanceConfig;
+  /** memberId -> their latest advance payment (absent if never recorded). */
+  lastAdvances: Record<string, LastAdvance>;
 }
 
 export interface ActionResult {
