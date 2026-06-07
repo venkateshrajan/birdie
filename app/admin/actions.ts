@@ -1,17 +1,8 @@
 "use server";
 
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import {
-  clearLoginAttempts,
-  loginAdmin,
-  loginAllowed,
-  logoutAdmin,
-  passwordMatches,
-  recordFailedLogin,
-  requireAdmin,
-} from "@/lib/session";
+import { clearSession, requireAdmin } from "@/lib/session";
 import { clearChat, setRates } from "@/lib/queries";
 import {
   createSession,
@@ -22,13 +13,7 @@ import {
 import { setNickname } from "@/lib/nicknames";
 import { getAdminData } from "@/lib/ledger";
 import type { Rates } from "@/lib/dates";
-import type { ActionResult, LoginState } from "@/lib/admin-types";
-
-async function clientIp(): Promise<string> {
-  const h = await headers();
-  const xff = h.get("x-forwarded-for");
-  return xff?.split(",")[0]?.trim() || h.get("x-real-ip") || "local";
-}
+import type { ActionResult } from "@/lib/admin-types";
 
 /** Run a guarded mutation, then return fresh admin data (or the error). */
 async function mutate(fn: () => Promise<void> | void): Promise<ActionResult> {
@@ -46,28 +31,9 @@ async function mutate(fn: () => Promise<void> | void): Promise<ActionResult> {
 
 // ---------- Auth ----------
 
-export async function loginAction(
-  _prev: LoginState,
-  formData: FormData,
-): Promise<LoginState> {
-  const ip = await clientIp();
-  if (!loginAllowed(ip)) {
-    return { error: "Too many attempts. Try again in a few minutes." };
-  }
-  const password = String(formData.get("password") ?? "");
-  if (!passwordMatches(password)) {
-    recordFailedLogin(ip);
-    return { error: "Wrong password." };
-  }
-  clearLoginAttempts(ip);
-  await loginAdmin();
-  redirect("/admin");
-}
-
 export async function logoutAction(): Promise<void> {
-  await requireAdmin();
-  await logoutAdmin();
-  redirect("/");
+  await clearSession();
+  redirect("/login");
 }
 
 // ---------- Session entry (writes to Splitwise) ----------
