@@ -1,5 +1,7 @@
 import { isAdmin } from "@/lib/session";
 import { runClaude } from "@/lib/claude";
+import { computeAdvance, parseMonthRef } from "@/lib/advance";
+import { todayStr } from "@/lib/dates";
 import {
   appendChatMessage,
   getClaudeSessionId,
@@ -36,6 +38,18 @@ export async function POST(request: Request) {
 
       let assistantText = "";
       try {
+        // Monthly advance is computed deterministically (no LLM arithmetic).
+        if (/\badvance\b/i.test(message)) {
+          const ref = parseMonthRef(message, todayStr());
+          const text = ref
+            ? (await computeAdvance(ref.year, ref.month)).message
+            : 'Which month? e.g. "advance for July 2026".';
+          send({ type: "text", text });
+          appendChatMessage("assistant", text);
+          send({ type: "done" });
+          return;
+        }
+
         for await (const ev of runClaude({ message, write, sessionId })) {
           switch (ev.kind) {
             case "session":

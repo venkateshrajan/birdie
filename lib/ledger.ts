@@ -8,7 +8,7 @@ import {
   type SplitwiseMember,
 } from "./splitwise";
 import { getNicknameMap } from "./nicknames";
-import { getSettings } from "./queries";
+import { getAdvanceConfig, getSettings } from "./queries";
 import type { LogRow, Stats, SummaryRow } from "./queries";
 import type { AdminData, AdminMember, AdminSession } from "./admin-types";
 
@@ -159,5 +159,6 @@ export async function getAdminData(): Promise<AdminData> {
     rates: settings.rates,
     stats: computeStats(members, sessions),
     summary: computeSummary(members, sessions, names),
+    advanceConfig: getAdvanceConfig(),
   };
 }

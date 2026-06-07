@@ -257,8 +257,8 @@ export function AdminConsole({
               </p>
             )}
 
-            {/* Date + amount */}
-            <div className="flex flex-wrap items-start gap-3">
+            {/* Date + amount (stacked so they never overlap on narrow screens) */}
+            <div className="flex flex-col gap-3">
               <div className="flex-1">
                 <Label className="mb-1 block text-xs font-bold uppercase tracking-wide">
                   Date

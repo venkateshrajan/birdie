@@ -1,5 +1,6 @@
 import { getDb } from "./db";
 import type { Rates } from "./dates";
+import type { AdvanceConfig } from "./admin-types";
 
 // NOTE: Birdie's ledger (sessions, attendees, balances, roster) now comes from
 // Splitwise — see lib/splitwise.ts and lib/ledger.ts. This module only holds
@@ -126,4 +127,21 @@ export function getClaudeSessionId(): string | null {
 
 export function setClaudeSessionId(id: string): void {
   setSetting("claude_session_id", id);
+}
+
+// ---------- Monthly advance config ----------
+
+export function getAdvanceConfig(): AdvanceConfig {
+  const raw = getSetting("advance_config");
+  if (!raw) return { members: {} };
+  try {
+    const parsed = JSON.parse(raw) as AdvanceConfig;
+    return parsed && parsed.members ? parsed : { members: {} };
+  } catch {
+    return { members: {} };
+  }
+}
+
+export function setAdvanceConfig(config: AdvanceConfig): void {
+  setSetting("advance_config", JSON.stringify(config));
 }

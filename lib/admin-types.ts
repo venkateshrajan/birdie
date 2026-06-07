@@ -31,6 +31,7 @@ export interface AdminData {
   rates: Rates;
   stats: Stats;
   summary: SummaryRow[];
+  advanceConfig: AdvanceConfig;
 }
 
 export interface ActionResult {
@@ -52,3 +53,25 @@ export interface ScreenshotResult {
   /** Player names read but not matched to a member. */
   unmatchedNames: string[];
 }
+
+// ---------- Monthly advance ----------
+
+/** Per-member advance settings (keyed by Splitwise member id). */
+export interface AdvanceMemberCfg {
+  /** Charge this member a monthly advance at all. */
+  include: boolean;
+  /** Also charged for Saturdays (weekday charge applies to everyone included). */
+  saturdayRegular: boolean;
+  /** Weekday indices (0 = Mon … 6 = Sun) this member is NOT charged for. */
+  skipDows: number[];
+}
+
+export interface AdvanceConfig {
+  members: Record<string, AdvanceMemberCfg>;
+}
+
+export const DEFAULT_ADVANCE_MEMBER_CFG: AdvanceMemberCfg = {
+  include: false,
+  saturdayRegular: false,
+  skipDows: [],
+};

@@ -201,6 +201,32 @@ export async function listSessions(limit = 0): Promise<Session[]> {
     }));
 }
 
+/**
+ * Each member's net balance (Σ paid_share − Σ owed_share) over all live
+ * entries — including settle-up payments — dated strictly before `cutoff`
+ * ('YYYY-MM-DD'). Positive = prepaid credit, negative = owes. Used by the
+ * monthly-advance generator to value carry-over "till the previous month".
+ */
+export async function getBalancesAsOf(
+  cutoff: string,
+): Promise<Map<number, number>> {
+  const groupId = await resolveGroupId();
+  const data = await apiGet<{ expenses: RawExpense[] }>("/get_expenses", {
+    group_id: groupId,
+    limit: 0,
+  });
+  const balances = new Map<number, number>();
+  for (const e of data.expenses) {
+    if (e.deleted_at) continue;
+    if ((e.date ?? "").slice(0, 10) >= cutoff) continue;
+    for (const u of e.users) {
+      const net = parseFloat(u.paid_share) - parseFloat(u.owed_share);
+      balances.set(u.user.id, (balances.get(u.user.id) ?? 0) + net);
+    }
+  }
+  return balances;
+}
+
 export interface SessionInput {
   date: string; // YYYY-MM-DD
   description: string;
