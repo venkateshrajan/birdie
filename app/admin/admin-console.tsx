@@ -196,7 +196,7 @@ export function AdminConsole({
             )}
 
             {/* Date + amount */}
-            <div className="flex flex-wrap items-end gap-3">
+            <div className="flex flex-wrap items-start gap-3">
               <div className="flex-1">
                 <Label className="mb-1 block text-xs font-bold uppercase tracking-wide">
                   Date
