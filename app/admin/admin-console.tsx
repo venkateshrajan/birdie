@@ -257,9 +257,9 @@ export function AdminConsole({
               </p>
             )}
 
-            {/* Date + amount (stacked so they never overlap on narrow screens) */}
-            <div className="flex flex-col gap-3">
-              <div className="flex-1">
+            {/* Date + amount — side by side, wraps on narrow screens */}
+            <div className="flex flex-wrap items-start gap-3">
+              <div>
                 <Label className="mb-1 block text-xs font-bold uppercase tracking-wide">
                   Date
                 </Label>
@@ -269,7 +269,7 @@ export function AdminConsole({
                   onChange={(e) =>
                     setForm((f) => ({ ...f, date: e.target.value || today }))
                   }
-                  className="money nb-sm h-11 border-[3px] bg-paper-2 text-base font-bold"
+                  className="money nb-sm h-11 w-44 border-[3px] bg-paper-2 text-base font-bold"
                 />
                 <span className="mt-1 inline-block rounded-full border-2 border-ink bg-court px-3 py-0.5 text-[10px] font-bold uppercase tracking-widest text-paper">
                   {dayTypeLabel(form.date)}
