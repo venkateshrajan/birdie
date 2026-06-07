@@ -1,5 +1,6 @@
 import { getLedger } from "@/lib/ledger";
 import { weekdayName } from "@/lib/dates";
+import { getSessionUser } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,10 @@ function row(cells: (string | number)[]): string {
 }
 
 export async function GET() {
+  // Members only — the ledger is no longer public.
+  if (!(await getSessionUser())) {
+    return new Response("Unauthorized", { status: 401 });
+  }
   const { log, summary } = await getLedger();
 
   const lines: string[] = [];
