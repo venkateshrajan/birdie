@@ -20,13 +20,40 @@ import type { AdminData, AdminMember, AdminSession } from "./admin-types";
 export const LEDGER_TTL_SECONDS = 60;
 
 const getCachedGroupData = unstable_cache(
-  async (): Promise<{ members: SplitwiseMember[]; sessions: Session[] }> => {
-    const [members, sessions] = await Promise.all([getMembers(), listSessions()]);
-    return { members, sessions };
+  async (): Promise<{
+    members: SplitwiseMember[];
+    sessions: Session[];
+    ownerId: number;
+  }> => {
+    const [members, sessions, ownerId] = await Promise.all([
+      getMembers(),
+      listSessions(),
+      getCurrentUserId(),
+    ]);
+    return { members, sessions, ownerId };
   },
   ["birdie-group-data"],
   { revalidate: LEDGER_TTL_SECONDS, tags: ["ledger"] },
 );
+
+/**
+ * Money-in entries (advances, prepayments, shuttle reimbursements) are modelled
+ * as the host owing the whole cost while a member paid. They belong in balances
+ * (Splitwise handles that) but are not game sessions, so we keep them out of the
+ * log/stats.
+ */
+function isMoneyIn(s: Session, hostId: number): boolean {
+  return (
+    s.attendees.length === 1 &&
+    s.attendees[0].id === hostId &&
+    s.payerId !== null &&
+    s.payerId !== hostId
+  );
+}
+
+function gameOnly(sessions: Session[], hostId: number): Session[] {
+  return sessions.filter((s) => !isMoneyIn(s, hostId));
+}
 
 // Derives Birdie's views directly from the Splitwise group (source of truth)
 // instead of a local SQLite copy. One Splitwise expense = one game session
@@ -99,10 +126,11 @@ function computeSummary(
 }
 
 export async function getLedger(): Promise<LedgerData> {
-  const { members, sessions } = await getCachedGroupData();
+  const { members, sessions, ownerId } = await getCachedGroupData();
+  const games = gameOnly(sessions, ownerId);
   const names = displayNames(members, getNicknameMap());
 
-  const log: LogRow[] = sortNewestFirst(sessions).map((s) => ({
+  const log: LogRow[] = sortNewestFirst(games).map((s) => ({
     date: s.date,
     amount: perHead(s),
     skipped: false,
@@ -114,8 +142,8 @@ export async function getLedger(): Promise<LedgerData> {
   }));
 
   return {
-    stats: computeStats(members, sessions),
-    summary: computeSummary(members, sessions, names),
+    stats: computeStats(members, games),
+    summary: computeSummary(members, games, names),
     log,
   };
 }
@@ -128,6 +156,7 @@ export async function getAdminData(): Promise<AdminData> {
     listSessions(),
     getCurrentUserId(),
   ]);
+  const games = gameOnly(sessions, meId);
   const nicknames = getNicknameMap();
   const names = displayNames(members, nicknames);
   const settings = getSettings();
@@ -142,7 +171,7 @@ export async function getAdminData(): Promise<AdminData> {
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
 
-  const adminSessions: AdminSession[] = sortNewestFirst(sessions).map((s) => ({
+  const adminSessions: AdminSession[] = sortNewestFirst(games).map((s) => ({
     expenseId: s.expenseId,
     date: s.date,
     perHead: perHead(s),
@@ -157,8 +186,8 @@ export async function getAdminData(): Promise<AdminData> {
     members: adminMembers,
     sessions: adminSessions,
     rates: settings.rates,
-    stats: computeStats(members, sessions),
-    summary: computeSummary(members, sessions, names),
+    stats: computeStats(members, games),
+    summary: computeSummary(members, games, names),
     advanceConfig: getAdvanceConfig(),
   };
 }

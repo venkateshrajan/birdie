@@ -15,6 +15,10 @@ import { DEFAULT_ADVANCE_MEMBER_CFG } from "./admin-types";
 const MON_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const DOW_NAME = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]; // 0=Mon
 
+export function monthAbbr(month: number): string {
+  return MON_ABBR[month - 1];
+}
+
 function ordinal(n: number): string {
   const s = ["th", "st", "nd", "rd"];
   const v = n % 100;

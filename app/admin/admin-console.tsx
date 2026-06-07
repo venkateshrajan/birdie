@@ -25,10 +25,12 @@ import {
   generateAdvanceAction,
   logoutAction,
   readScreenshotAction,
+  recordAdvancePaymentAction,
   saveAdvanceConfigAction,
   setNicknameAction,
   setRatesAction,
   updateSessionAction,
+  type AdvanceLineDTO,
 } from "./actions";
 
 /** Downscale an image file to a small JPEG (keeps Server Action payloads well
@@ -472,7 +474,12 @@ export function AdminConsole({
             onSave={(r) => run(setRatesAction(r))}
           />
 
-          <AdvancePanel today={today} />
+          <AdvancePanel
+            today={today}
+            onRecord={(id, ym, amt) =>
+              run(recordAdvancePaymentAction(id, ym, amt))
+            }
+          />
 
           <AdvanceSettings
             members={data.members}
@@ -633,17 +640,34 @@ function RatesForm({
   );
 }
 
-function AdvancePanel({ today }: { today: string }) {
+function AdvancePanel({
+  today,
+  onRecord,
+}: {
+  today: string;
+  onRecord: (memberId: number, yearMonth: string, amount: number) => Promise<boolean>;
+}) {
   const [month, setMonth] = useState(today.slice(0, 7)); // YYYY-MM
   const [message, setMessage] = useState("");
+  const [lines, setLines] = useState<AdvanceLineDTO[]>([]);
+  const [amounts, setAmounts] = useState<Record<number, string>>({});
+  const [paid, setPaid] = useState<Set<number>>(new Set());
   const [busy, setBusy] = useState(false);
 
   async function generate() {
     setBusy(true);
     try {
       const res = await generateAdvanceAction(month);
-      if (res.ok && res.message) setMessage(res.message);
-      else toast.error(res.error ?? "Could not generate the advance.");
+      if (res.ok && res.message) {
+        setMessage(res.message);
+        setLines(res.lines ?? []);
+        setAmounts(
+          Object.fromEntries((res.lines ?? []).map((l) => [l.id, String(l.suggested)])),
+        );
+        setPaid(new Set());
+      } else {
+        toast.error(res.error ?? "Could not generate the advance.");
+      }
     } catch {
       toast.error("Action failed. Are you still logged in?");
     } finally {
@@ -657,6 +681,23 @@ function AdvancePanel({ today }: { today: string }) {
       toast.success("Copied to clipboard.");
     } catch {
       toast.error("Couldn't copy — select and copy manually.");
+    }
+  }
+
+  async function record(line: AdvanceLineDTO) {
+    const amount = Math.round(+amounts[line.id] || 0);
+    if (!(amount > 0)) {
+      toast.error("Enter the amount paid.");
+      return;
+    }
+    setBusy(true);
+    try {
+      if (await onRecord(line.id, month, amount)) {
+        setPaid((p) => new Set(p).add(line.id));
+        toast.success(`Recorded ${line.name}’s advance.`);
+      }
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -687,6 +728,7 @@ function AdvancePanel({ today }: { today: string }) {
           Generate
         </Button>
       </div>
+
       {message && (
         <div className="mt-3">
           <textarea
@@ -702,6 +744,54 @@ function AdvancePanel({ today }: { today: string }) {
           >
             Copy message
           </Button>
+        </div>
+      )}
+
+      {lines.length > 0 && (
+        <div className="mt-4">
+          <p className="mb-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">
+            Record payments (type the exact amount paid)
+          </p>
+          <ul className="flex flex-col gap-2">
+            {lines.map((l) => {
+              const done = paid.has(l.id);
+              return (
+                <li
+                  key={l.id}
+                  className="flex items-center gap-2 rounded-[3px] border-2 border-ink/20 bg-paper-2 px-3 py-2"
+                >
+                  <span className="flex-1 font-semibold">{l.name}</span>
+                  <span className="money text-sm text-muted-foreground">₹</span>
+                  <Input
+                    type="number"
+                    min={0}
+                    inputMode="numeric"
+                    value={amounts[l.id] ?? ""}
+                    disabled={done}
+                    onChange={(e) =>
+                      setAmounts((a) => ({ ...a, [l.id]: e.target.value }))
+                    }
+                    className="money nb-sm h-9 w-24 border-2 bg-paper text-sm font-bold"
+                  />
+                  {done ? (
+                    <span className="text-xs font-bold uppercase tracking-wide text-court-2">
+                      ✓ paid
+                    </span>
+                  ) : (
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => record(l)}
+                      disabled={busy}
+                      className="nb-press border-2 border-ink bg-lime text-xs font-bold text-ink hover:bg-lime-d"
+                    >
+                      Record
+                    </Button>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
         </div>
       )}
     </Panel>

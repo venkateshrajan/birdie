@@ -7,12 +7,14 @@ import { clearChat, setAdvanceConfig, setRates } from "@/lib/queries";
 import {
   createSession,
   deleteSession,
+  getMembers,
+  recordAdvance,
   updateSession,
   type SessionInput,
 } from "@/lib/splitwise";
-import { setNickname } from "@/lib/nicknames";
+import { getNicknameMap, setNickname } from "@/lib/nicknames";
 import { getAdminData } from "@/lib/ledger";
-import { computeAdvance } from "@/lib/advance";
+import { computeAdvance, monthAbbr } from "@/lib/advance";
 import { extractPlayersFromScreenshot } from "@/lib/vision";
 import { anthropicApiKey } from "@/lib/env";
 import type { Rates } from "@/lib/dates";
@@ -107,9 +109,17 @@ export async function setRatesAction(rates: Rates): Promise<ActionResult> {
 
 // ---------- Monthly advance ----------
 
+export interface AdvanceLineDTO {
+  id: number;
+  name: string;
+  /** Suggested amount to collect (0 when already covered). */
+  suggested: number;
+}
+
 export interface AdvanceMessageResult {
   ok: boolean;
   message?: string;
+  lines?: AdvanceLineDTO[];
   error?: string;
 }
 
@@ -120,8 +130,16 @@ export async function generateAdvanceAction(
   const [y, m] = (yearMonth ?? "").split("-").map(Number);
   if (!y || !m || m < 1 || m > 12) return { ok: false, error: "Pick a month." };
   try {
-    const { message } = await computeAdvance(y, m);
-    return { ok: true, message };
+    const { message, lines } = await computeAdvance(y, m);
+    return {
+      ok: true,
+      message,
+      lines: lines.map((l) => ({
+        id: l.id,
+        name: l.name,
+        suggested: Math.max(0, l.total),
+      })),
+    };
   } catch (e) {
     return {
       ok: false,
@@ -134,6 +152,28 @@ export async function saveAdvanceConfigAction(
   config: AdvanceConfig,
 ): Promise<ActionResult> {
   return mutate(() => setAdvanceConfig(config));
+}
+
+/** Record that a member paid their advance for a month (exact amount typed). */
+export async function recordAdvancePaymentAction(
+  memberId: number,
+  yearMonth: string,
+  amount: number,
+): Promise<ActionResult> {
+  return mutate(async () => {
+    if (!(amount > 0)) throw new Error("Enter the amount paid.");
+    const [y, m] = (yearMonth ?? "").split("-").map(Number);
+    if (!y || !m || m < 1 || m > 12) throw new Error("Pick a month.");
+    const member = (await getMembers()).find((x) => x.id === memberId);
+    if (!member) throw new Error("Member not found.");
+    const name = getNicknameMap().get(memberId) || member.firstName || member.name;
+    await recordAdvance({
+      memberId,
+      amount: Math.round(amount),
+      date: `${y}-${String(m).padStart(2, "0")}-01`,
+      description: `${name}’s ${monthAbbr(m)} advance`,
+    });
+  });
 }
 
 export async function clearChatAction(): Promise<void> {

@@ -301,3 +301,48 @@ export async function deleteSession(expenseId: number): Promise<void> {
     );
   }
 }
+
+/**
+ * Record an advance payment as an expense: the member pays the full amount and
+ * the host (API-key owner) owes it — matching how advances have always been
+ * entered ("<Name>'s <Month> advance"). This gives the member a prepaid credit
+ * that their game shares draw down. Returns the new expense id.
+ */
+export async function recordAdvance(opts: {
+  memberId: number;
+  amount: number;
+  date: string; // YYYY-MM-DD
+  description: string;
+}): Promise<number> {
+  const [groupId, hostId] = await Promise.all([
+    resolveGroupId(),
+    getCurrentUserId(),
+  ]);
+  if (opts.memberId === hostId) {
+    throw new SplitwiseError("The host doesn't pay an advance.");
+  }
+  const amt = opts.amount.toFixed(2);
+  const data = await apiPost<{ expenses: { id: number }[]; errors?: unknown }>(
+    "/create_expense",
+    {
+      cost: amt,
+      description: opts.description,
+      currency_code: "INR",
+      date: opts.date,
+      group_id: groupId,
+      users__0__user_id: opts.memberId,
+      users__0__paid_share: amt,
+      users__0__owed_share: "0.00",
+      users__1__user_id: hostId,
+      users__1__paid_share: "0.00",
+      users__1__owed_share: amt,
+    },
+  );
+  const id = data.expenses?.[0]?.id;
+  if (!id) {
+    throw new SplitwiseError(
+      `record advance failed: ${JSON.stringify(data.errors ?? data)}`,
+    );
+  }
+  return id;
+}
