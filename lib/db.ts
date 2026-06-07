@@ -50,6 +50,14 @@ const MIGRATIONS: ((db: Database.Database) => void)[] = [
       created_at  TEXT NOT NULL DEFAULT (datetime('now'))
     )`);
   },
+  // v1 -> v2: local display nicknames for Splitwise members. member_id is the
+  // Splitwise user id; roster identity itself lives in Splitwise (source of truth).
+  (db) => {
+    db.exec(`CREATE TABLE IF NOT EXISTS member_nicknames (
+      member_id INTEGER PRIMARY KEY,
+      nickname  TEXT NOT NULL
+    )`);
+  },
 ];
 
 function migrate(db: Database.Database): void {

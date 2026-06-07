@@ -216,7 +216,6 @@ function expenseForm(input: SessionInput): Record<string, string | number> {
     description: input.description,
     currency_code: "INR",
     date: input.date,
-    split_equally: "false",
   };
   input.shares.forEach((s, i) => {
     const paid = s.userId === input.payerId ? total : 0;
