@@ -1,7 +1,13 @@
 import "server-only";
-import { getBalancesAsOf, getMembers } from "./splitwise";
+import {
+  getBalancesAsOf,
+  getCurrentUserId,
+  getMembers,
+  listSessions,
+} from "./splitwise";
 import { getNicknameMap } from "./nicknames";
 import { getAdvanceConfig, getSettings } from "./queries";
+import { shortDay } from "./dates";
 import { DEFAULT_ADVANCE_MEMBER_CFG } from "./admin-types";
 
 // Monthly advance generator. Everyone included is charged every weekday
@@ -58,9 +64,11 @@ export async function computeAdvance(
   month: number,
 ): Promise<AdvanceResult> {
   const cutoff = `${year}-${pad(month)}-01`; // balances strictly before this
-  const [members, balances] = await Promise.all([
+  const [members, balances, sessions, hostId] = await Promise.all([
     getMembers(),
     getBalancesAsOf(cutoff),
+    listSessions(),
+    getCurrentUserId(),
   ]);
   const nicknames = getNicknameMap();
   const cfg = getAdvanceConfig();
@@ -129,6 +137,35 @@ export async function computeAdvance(
   const tillLabel = `${ordinal(prevLastDay)} ${MON_ABBR[prevMonth - 1]}`;
   const mon = MON_ABBR[month - 1];
 
+  // Days each included member played in the previous month (game sessions only;
+  // money-in entries — host owes the whole cost while a member paid — excluded).
+  const prevYM = `${prevYear}-${pad(prevMonth)}`;
+  const playedDates = new Map<number, string[]>();
+  for (const s of sessions) {
+    if (!s.date.startsWith(prevYM)) continue;
+    if (
+      s.attendees.length === 1 &&
+      s.attendees[0].id === hostId &&
+      s.payerId !== hostId
+    ) {
+      continue;
+    }
+    for (const a of s.attendees) {
+      const arr = playedDates.get(a.id) ?? [];
+      arr.push(s.date);
+      playedDates.set(a.id, arr);
+    }
+  }
+  const daysBlock = [
+    `Days played in ${MON_ABBR[prevMonth - 1]}:`,
+    ...included.map(({ m, name }) => {
+      const dates = [...new Set(playedDates.get(m.id) ?? [])].sort();
+      return dates.length
+        ? `${name} (${dates.length}): ${dates.map(shortDay).join(", ")}`
+        : `${name}: 0`;
+    }),
+  ];
+
   const header = [
     `*${mon} month’s advance details:*`,
     `${weekdayCount} Weekdays (${base})`,
@@ -154,6 +191,7 @@ export async function computeAdvance(
     header.join("\n"),
     balanceBlock.join("\n"),
     advanceBlock.join("\n"),
+    daysBlock.join("\n"),
   ].join("\n\n");
 
   return { year, month, message, lines };

@@ -85,22 +85,31 @@ export function PlayDays({
   const selectedId = allowPickPlayer ? picked : meId;
   const myDates = useMemo(() => {
     if (selectedId === "" || selectedId == null) return [];
-    return monthSessions
-      .filter((s) => s.attendeeIds.includes(selectedId))
-      .map((s) => s.date);
+    // Distinct days (a member may play more than one session on a date).
+    return [
+      ...new Set(
+        monthSessions
+          .filter((s) => s.attendeeIds.includes(selectedId))
+          .map((s) => s.date),
+      ),
+    ];
   }, [monthSessions, selectedId]);
 
   const breakdown = useMemo(() => {
-    const byId = new Map<number, string[]>();
+    const byId = new Map<number, Set<string>>();
     for (const s of monthSessions) {
       for (const id of s.attendeeIds) {
-        const arr = byId.get(id) ?? [];
-        arr.push(s.date);
-        byId.set(id, arr);
+        const set = byId.get(id) ?? new Set<string>();
+        set.add(s.date);
+        byId.set(id, set);
       }
     }
     return [...byId.entries()]
-      .map(([id, dates]) => ({ id, name: nameById.get(id) ?? `#${id}`, dates }))
+      .map(([id, dates]) => ({
+        id,
+        name: nameById.get(id) ?? `#${id}`,
+        dates: [...dates],
+      }))
       .sort((a, b) => b.dates.length - a.dates.length || a.name.localeCompare(b.name));
   }, [monthSessions, nameById]);
 
