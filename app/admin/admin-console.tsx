@@ -5,6 +5,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { SiteHeader } from "@/components/site-header";
 import { PeopleTable, Panel, StatStrip } from "@/components/summary";
+import { PlayDays } from "@/components/play-days";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -581,6 +582,16 @@ export function AdminConsole({
               </ul>
             )}
           </Panel>
+
+          <PlayDays
+            sessions={data.sessions.map((s) => ({
+              date: s.date,
+              attendeeIds: s.attendeeIds,
+            }))}
+            members={data.members.map((m) => ({ id: m.id, name: m.name }))}
+            currentMonth={today.slice(0, 7)}
+            allowPickPlayer
+          />
         </div>
       </main>
     </>

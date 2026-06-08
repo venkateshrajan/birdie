@@ -3,9 +3,11 @@ import { SiteHeader } from "@/components/site-header";
 import { DayLog, PeopleTable, Panel, StatStrip } from "@/components/summary";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { PlayDays } from "@/components/play-days";
 import { getLedger } from "@/lib/ledger";
 import { requireMember } from "@/lib/session";
 import { formatINR } from "@/lib/format";
+import { todayStr } from "@/lib/dates";
 
 // Reads straight from the Splitwise group (source of truth) on each request.
 // Caching is a deliberate later step.
@@ -66,6 +68,13 @@ export default async function Dashboard() {
         </div>
 
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+          <PlayDays
+            sessions={log.map((l) => ({ date: l.date, attendeeIds: l.attendeeIds }))}
+            members={summary.map((s) => ({ id: s.id, name: s.name }))}
+            meId={user.id}
+            currentMonth={todayStr().slice(0, 7)}
+          />
+
           <Panel
             title="Who owes what"
             action={

@@ -82,3 +82,10 @@ export function prettyDate(s: string): string {
   ][d.getMonth()];
   return `${wd}, ${d.getDate()} ${mon} ${d.getFullYear()}`;
 }
+
+/** Compact 'Tue 3' (weekday + day-of-month) for month-scoped lists. */
+export function shortDay(s: string): string {
+  const d = parseLocal(s);
+  const wd = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getDay()];
+  return `${wd} ${d.getDate()}`;
+}

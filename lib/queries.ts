@@ -24,6 +24,7 @@ export interface LogRow {
   count: number;
   dayTotal: number;
   names: string[];
+  attendeeIds: number[];
   synced: boolean;
   splitwiseExpenseId: number | null;
 }

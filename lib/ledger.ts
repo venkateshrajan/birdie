@@ -161,6 +161,7 @@ export async function getLedger(): Promise<LedgerData> {
     count: s.attendees.length,
     dayTotal: s.total,
     names: s.attendees.map((a) => names.get(a.id) ?? a.name),
+    attendeeIds: s.attendees.map((a) => a.id),
     synced: true, // it lives in Splitwise by definition
     splitwiseExpenseId: s.expenseId,
   }));
