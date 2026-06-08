@@ -190,8 +190,8 @@ export async function computeAdvance(
   const message = [
     header.join("\n"),
     balanceBlock.join("\n"),
-    advanceBlock.join("\n"),
     daysBlock.join("\n"),
+    advanceBlock.join("\n"),
   ].join("\n\n");
 
   return { year, month, message, lines };
