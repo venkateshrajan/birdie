@@ -498,6 +498,17 @@ export function AdminConsole({
             busy={busy}
             onSave={(c) => run(saveAdvanceConfigAction(c))}
           />
+
+          <PlayDays
+            sessions={data.sessions.map((s) => ({
+              date: s.date,
+              attendeeIds: s.attendeeIds,
+            }))}
+            members={data.members.map((m) => ({ id: m.id, name: m.name }))}
+            currentMonth={today.slice(0, 7)}
+            allowPickPlayer
+            showCopy
+          />
         </div>
 
         {/* RIGHT: live summary + sessions */}
@@ -582,16 +593,6 @@ export function AdminConsole({
               </ul>
             )}
           </Panel>
-
-          <PlayDays
-            sessions={data.sessions.map((s) => ({
-              date: s.date,
-              attendeeIds: s.attendeeIds,
-            }))}
-            members={data.members.map((m) => ({ id: m.id, name: m.name }))}
-            currentMonth={today.slice(0, 7)}
-            allowPickPlayer
-          />
         </div>
       </main>
     </>

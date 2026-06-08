@@ -1,11 +1,40 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { toast } from "sonner";
 import { Panel } from "@/components/summary";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { shortDay } from "@/lib/dates";
+
+const MONTHS_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function monthLabel(ym: string): string {
+  const [y, m] = ym.split("-").map(Number);
+  return `${MONTHS_ABBR[m - 1] ?? ym} ${y}`;
+}
+
+async function copyText(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast.success("Copied to clipboard.");
+  } catch {
+    toast.error("Couldn't copy — select and copy manually.");
+  }
+}
+
+function CopyButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="nb-press h-8 rounded-[4px] border-2 border-ink bg-paper-2 px-2 text-xs font-bold text-ink hover:bg-lime/40"
+    >
+      Copy
+    </button>
+  );
+}
 
 export interface PlaySession {
   date: string; // YYYY-MM-DD
@@ -28,12 +57,14 @@ export function PlayDays({
   currentMonth,
   meId,
   allowPickPlayer = false,
+  showCopy = false,
 }: {
   sessions: PlaySession[];
   members: PlayMember[];
   currentMonth: string; // YYYY-MM
   meId?: number;
   allowPickPlayer?: boolean;
+  showCopy?: boolean;
 }) {
   const [month, setMonth] = useState(currentMonth);
   const [picked, setPicked] = useState<number | "">(allowPickPlayer ? "" : (meId ?? ""));
@@ -76,9 +107,31 @@ export function PlayDays({
   const selectedName =
     allowPickPlayer && picked !== "" ? nameById.get(picked) : undefined;
 
+  function copyOnePlayer() {
+    const who = selectedName ?? "You";
+    const body = myDates.length
+      ? myDates.map(shortDay).join(", ")
+      : "no games this month";
+    copyText(`${who} — ${monthLabel(month)} (${myDates.length})\n${body}`);
+  }
+
+  function copyEveryone() {
+    const body = breakdown.length
+      ? breakdown
+          .map((p) => `${p.name} (${p.dates.length}): ${p.dates.map(shortDay).join(", ")}`)
+          .join("\n")
+      : "no games this month";
+    copyText(`Days played — ${monthLabel(month)}\n${body}`);
+  }
+
+  const canCopyOne = showCopy && (allowPickPlayer ? picked !== "" : true);
+
   return (
     <>
-      <Panel title="Play days">
+      <Panel
+        title="Play days"
+        action={canCopyOne ? <CopyButton onClick={copyOnePlayer} /> : undefined}
+      >
         <div className="flex flex-wrap items-end gap-3">
           <div>
             <Label className="mb-1 block text-xs font-bold uppercase tracking-wide">
@@ -144,7 +197,10 @@ export function PlayDays({
         )}
       </Panel>
 
-      <Panel title="Days played · everyone">
+      <Panel
+        title="Days played · everyone"
+        action={showCopy ? <CopyButton onClick={copyEveryone} /> : undefined}
+      >
         {breakdown.length === 0 ? (
           <p className="py-4 text-center text-sm text-muted-foreground">
             No games this month.
